@@ -23,6 +23,7 @@ import json
 import os
 import sys
 import argparse
+import threading
 from datetime import datetime, timezone
 from dataclasses import dataclass, field, asdict
 from typing import Optional
@@ -144,7 +145,7 @@ class UdevEventMonitor:
         self._device_path = device_filter or "/dev/sr0"
 
         # Determine the sysfs path for polling fallback
-        dev_name = self._device_path.lstrip("/")  # "sr0"
+        dev_name = os.path.basename(self._device_path)  # "sr0"
         self._sys_path = f"/sys/class/block/{dev_name}"
 
         # Attempt netlink monitoring first
@@ -153,7 +154,15 @@ class UdevEventMonitor:
         # If netlink failed (GNOME likely consumed the socket), switch to polling
         if not self._observer:
             print("[MONITOR] Netlink unavailable — falling back to sysfs polling")
-            self._last_event_cnt = self._read_event_count()
+            self._prev_size = self._read_size()
+            self._prev_media = self._check_media_state()
+            # Launch the polling loop in a background thread.
+            self._poll_thread = threading.Thread(
+                target=self._poll_loop, daemon=True
+            )
+            self._poll_thread.start()
+        else:
+            self._prev_media = None
 
         target = device_filter if device_filter else "all block devices"
         method = "polling" if not self._observer else "netlink"
@@ -188,6 +197,8 @@ class UdevEventMonitor:
         if self._observer:
             self._observer.stop()
             self._observer.join(timeout=2)
+        if hasattr(self, "_poll_thread") and self._poll_thread.is_alive():
+            self._poll_thread.join(timeout=2)
         self._print_summary()
 
     def stop_event(self) -> None:
@@ -241,35 +252,42 @@ class UdevEventMonitor:
 
     # -- polling fallback ----------------------------------------------------
 
-    def _read_event_count(self) -> Optional[int]:
-        """Read the kernel event counter from /sys/class/block/<dev>/events."""
+    def _read_size(self) -> Optional[int]:
+        """Read /sys/class/block/<dev>/size in 512-byte sectors.
+
+        size = 0  ⇒  no media in tray.
+        size > 0  ⇒  media present.
+        """
         try:
-            with open(f"{self._sys_path}/events", "r") as f:
+            with open(f"{self._sys_path}/size", "r") as f:
                 return int(f.read().strip())
         except (OSError, ValueError):
             return None
 
     def _check_media_state(self) -> Optional[str]:
-        """Check if media is available via /sys/class/block/sr0/mediate."""
-        try:
-            with open(f"{self._sys_path}/media_available", "r") as f:
-                return f.read().strip()
-        except (OSError, ValueError):
+        """Check if media is available via sysfs size.
+
+        Returns '1' when size > 0 (media present), '0' when size == 0 (empty/ejected),
+        or None when the sysfs entry is unreadable.
+        """
+        size = self._read_size()
+        if size is None:
             return None
+        return "1" if size > 0 else "0"
 
     def _poll_loop(self) -> None:
-        """Poll sysfs for event changes (fallback when netlink is unavailable)."""
+        """Poll sysfs for media-size changes (fallback when netlink is unavailable)."""
         while self._running:
-            new_cnt = self._read_event_count()
-            if new_cnt is not None:
-                if self._last_event_cnt is not None and new_cnt != self._last_event_cnt:
-                    # Event occurred — read current state
-                    self._capture_poll_event(new_cnt)
-                self._last_event_cnt = new_cnt
-            time.sleep(0.5)
+            current_size = self._read_size()
+            if current_size is not None:
+                if self._prev_size is not None and current_size != self._prev_size:
+                    # Size changed — media was inserted or ejected
+                    self._capture_poll_event(current_size)
+                self._prev_size = current_size
+            time.sleep(1)
 
-    def _capture_poll_event(self, event_count: int) -> None:
-        """Capture an event based on current sysfs state."""
+    def _capture_poll_event(self, current_size: int) -> None:
+        """Capture an event based on current sysfs size."""
         ts = time.time()
         now = datetime.now(timezone.utc).isoformat()
         delay = ts - self.start_time
@@ -277,22 +295,18 @@ class UdevEventMonitor:
         # Read current media state
         media = self._check_media_state()
 
-        # Determine action from previous vs current state
-        # Since we only track media state, we infer from the change
-        prev_media = None
-        if self.events:
-            last_event = self.events[-1]
-            prev_media = last_event.media_available
+        # Determine action from previous vs current size
+        prev_size = self._prev_size
 
-        if media == "1" and prev_media != "1":
+        if current_size > 0 and prev_size == 0:
             action = "change"
-            description = "MEDIA_INSERTED"
-        elif media == "0" and prev_media != "0":
+            description = f"MEDIA_INSERTED ({current_size * 512 // (1024*1024)} MB)"
+        elif current_size == 0 and prev_size > 0:
             action = "change"
             description = "MEDIA_EJECTED"
         else:
             action = "change"
-            description = "MEDIA_CHANGED"
+            description = f"MEDIA_CHANGED (size={current_size})"
 
         event = UdevEvent(
             timestamp=now,
@@ -310,7 +324,7 @@ class UdevEventMonitor:
 
         self.events.append(event)
         self._print_event(event, delay)
-        print(f"         Event count: {event_count}  Media: {media}")
+        print(f"         Size: {current_size} sectors ({current_size * 512 // (1024*1024)} MB)  Media: {media}")
 
     # -- event display -------------------------------------------------------
 
