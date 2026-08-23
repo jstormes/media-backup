@@ -1,0 +1,3 @@
+.qwen/tmp
+node_modules/
+.env
