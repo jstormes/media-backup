@@ -79,7 +79,7 @@ A detailed technical build spec for the Media Backup Capture Application — wri
 
 | # | Type | Title | Status |
 |---|------|-------|--------|
-| [#2](https://github.com/jstormes/media-backup/issues/2) | task | Setup MakeMKV on target system | **frontier** |
+| [#2](https://github.com/jstormes/media-backup/issues/2) | task | Setup MakeMKV on target system | **done** |
 | [#3](https://github.com/jstormes/media-backup/issues/3) | research | MakeMKV interface test suite | **frontier** |
 | [#4](https://github.com/jstormes/media-backup/issues/4) | prototype | F1/F2 keycode scanning test | **frontier** |
 | [#5](https://github.com/jstormes/media-backup/issues/5) | prototype | Drive-closing copy trigger (udev) | **blocked by #2** |
