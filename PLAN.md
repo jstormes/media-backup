@@ -80,15 +80,15 @@ A detailed technical build spec for the Media Backup Capture Application — wri
 | # | Type | Title | Status |
 |---|------|-------|--------|
 | [#2](https://github.com/jstormes/media-backup/issues/2) | task | Setup MakeMKV on target system | **done** |
-| [#3](https://github.com/jstormes/media-backup/issues/3) | research | MakeMKV interface test suite | **frontier** |
-| [#4](https://github.com/jstormes/media-backup/issues/4) | prototype | F1/F2 keycode scanning test | **frontier** |
-| [#5](https://github.com/jstormes/media-backup/issues/5) | prototype | Drive-closing copy trigger (udev) | **blocked by #2** |
-| [#6](https://github.com/jstormes/media-backup/issues/6) | task | Write the Media Backup Build Spec | **blocked by #2, #3, #4, #5** |
+| [#3](https://github.com/jstormes/media-backup/issues/3) | research | MakeMKV interface test suite | **done** |
+| [#4](https://github.com/jstormes/media-backup/issues/4) | prototype | F1/F2 keycode scanning test | **done** |
+| [#5](https://github.com/jstormes/media-backup/issues/5) | prototype | Drive-closing copy trigger (udev) | **done** |
+| [#6](https://github.com/jstormes/media-backup/issues/6) | task | Write the Media Backup Build Spec | **done** |
 
 ## Frontier
 
-Three parallel tickets are takeable: #2, #3, #4.
+No frontier tickets remain. All research, prototyping, and planning is complete.
 
 ## Next step
 
-Resolve the frontier tickets, then write the build spec (#6).
+Implement the application from [`BUILD-SPEC.md`](BUILD-SPEC.md).
